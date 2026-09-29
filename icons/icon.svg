@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#b0392b"/>
+  <rect x="251" y="72" width="10" height="61" rx="5" fill="#f3f1ec"/>
+  <rect x="251" y="379" width="10" height="61" rx="5" fill="#f3f1ec"/>
+  <text x="256" y="256" dominant-baseline="central" text-anchor="middle" font-size="215" font-weight="600" fill="#f3f1ec" font-family="Hiragino Mincho ProN, Yu Mincho, serif">速</text>
+</svg>

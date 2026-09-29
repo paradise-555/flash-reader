@@ -1,0 +1,19 @@
+# ローカル専用の設定
+.claude/
+__pycache__/
+
+# 参考書のスキャン・OCR結果は絶対に公開しない（私的複製の範囲に留めるため）
+scans/
+ocr_work/
+books/
+*.pdf
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+*.heic
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
