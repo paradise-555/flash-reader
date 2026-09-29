@@ -32,7 +32,7 @@
       <input type="file" id="file-input" class="visually-hidden" accept=".txt,.md,text/plain">
     </label>
     <button type="button" class="btn" id="paste-btn">貼り付けで追加</button>
-    <button type="button" class="btn ghost" id="sample-btn">サンプルを追加</button>
+    <button type="button" class="btn ghost" id="sample-btn">サンプル一覧から追加</button>
   </footer>
 </section>
 
@@ -142,6 +142,12 @@
   <div class="sheet-head"><h2>前後の文</h2><button type="button" class="text-btn" data-close>閉じる</button></div>
   <div id="context-body" class="context-body"></div>
   <p class="note">語をタップするとその位置へ移動します</p>
+</section>
+
+<section id="sample-sheet" class="sheet" hidden aria-label="サンプル一覧">
+  <div class="sheet-head"><h2>サンプル一覧</h2><button type="button" class="text-btn" data-close>閉じる</button></div>
+  <ul id="sample-list" class="chapter-list"></ul>
+  <p id="sample-msg" class="note"></p>
 </section>
 
 <section id="paste-sheet" class="sheet" hidden aria-label="貼り付けで追加">

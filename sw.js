@@ -1,6 +1,6 @@
 // オフライン対応: ネット優先、つながらなければキャッシュを使う
 // （更新がすぐ反映されるよう、キャッシュ優先にはしていない）
-const CACHE = 'flash-reader-v1';
+const CACHE = 'flash-reader-v2';
 const ASSETS = [
   './',
   'index.html',
@@ -15,6 +15,7 @@ const ASSETS = [
   'icons/icon-180.png',
   'icons/icon-192.png',
   'icons/icon-512.png',
+  'samples/index.json',
   'samples/uchu.txt',
 ];
 

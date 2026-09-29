@@ -366,6 +366,8 @@ button { touch-action: manipulation; }
   cursor: pointer;
 }
 .chapter-list button.current { color: var(--accent); font-weight: 700; }
+.chapter-list .sample-item { display: flex; flex-direction: column; gap: 4px; line-height: 1.5; }
+.sample-meta { font-family: var(--font-ui); font-size: 12px; color: var(--muted); }
 
 .context-body { font-family: var(--font-read); font-size: 17px; line-height: 2; }
 .context-body p, .context-body h3 { margin: 0 0 12px; }

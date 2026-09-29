@@ -18,7 +18,8 @@ const DEFAULTS = {
   guide: true,
   theme: 'auto',
 };
-const SAMPLE_URL = 'samples/uchu.txt';
+const SAMPLE_DIR = 'samples/';
+const SAMPLE_INDEX_URL = SAMPLE_DIR + 'index.json';
 const START_DELAY = 300; // 再生開始直後の間（ms）
 const SAVE_INTERVAL = 5000; // 再生中の位置保存間隔（ms）
 
@@ -109,7 +110,13 @@ async function renderLibrary() {
   }
 }
 
-async function addBookFromText(raw, fallbackTitle, overrideTitle) {
+/**
+ * 本文を解析して本棚に追加する。
+ * @param {string} raw 本文
+ * @param {{fallbackTitle?: string, overrideTitle?: string, source?: string}} opts
+ *   source: サンプル由来ならそのファイル名（追加済み判定に使う）
+ */
+async function addBookFromText(raw, { fallbackTitle = '', overrideTitle = '', source = '' } = {}) {
   const book = parseBook(raw);
   if (!book.totalChars) {
     alert('本文が空です。');
@@ -123,6 +130,7 @@ async function addBookFromText(raw, fallbackTitle, overrideTitle) {
     addedAt: Date.now(),
     openedAt: 0,
   };
+  if (source) meta.source = source;
   await store.addBook(meta, raw);
   return true;
 }
@@ -143,10 +151,64 @@ async function readTextFile(file) {
   }
 }
 
-async function addSample() {
-  const res = await fetch(SAMPLE_URL);
-  if (!res.ok) throw new Error('サンプルを読み込めませんでした');
-  await addBookFromText(await res.text(), 'サンプル');
+// サンプル一覧（samples/index.json）を取得する。新しい順に並べる
+async function fetchSampleIndex() {
+  const res = await fetch(SAMPLE_INDEX_URL, { cache: 'no-cache' });
+  if (!res.ok) throw new Error('サンプル一覧を読み込めませんでした');
+  const data = await res.json();
+  return [...(data.samples ?? [])].sort((a, b) => String(b.added).localeCompare(String(a.added)));
+}
+
+async function addSample(entry) {
+  const res = await fetch(SAMPLE_DIR + entry.file, { cache: 'no-cache' });
+  if (!res.ok) throw new Error(`「${entry.title}」を読み込めませんでした`);
+  return addBookFromText(await res.text(), { fallbackTitle: entry.title, source: entry.file });
+}
+
+// サンプル一覧シートを開く。本棚にあるものは「追加済み」と表示する
+async function openSampleList() {
+  const list = $('sample-list');
+  const msg = $('sample-msg');
+  list.replaceChildren();
+  msg.textContent = '読み込み中…';
+  openSheet('sample-sheet');
+  let samples;
+  let books;
+  try {
+    [samples, books] = await Promise.all([fetchSampleIndex(), store.listBooks()]);
+  } catch (err) {
+    msg.textContent = err.message + '（ネットにつながっているか確認してください）';
+    return;
+  }
+  msg.textContent = samples.length ? '' : 'サンプルはまだありません。';
+  // source を持たない古いデータは書名で判定する
+  const owned = new Set(books.flatMap((b) => [b.source, b.title]).filter(Boolean));
+  for (const entry of samples) {
+    const added = owned.has(entry.file) || owned.has(entry.title);
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sample-item';
+    const t = document.createElement('span');
+    t.textContent = entry.title;
+    const m = document.createElement('span');
+    m.className = 'sample-meta';
+    m.textContent = `${entry.chars ? fmtNum(entry.chars) + '字' : ''}${added ? ' ・ 追加済み' : ''}`;
+    b.append(t, m);
+    b.addEventListener('click', async () => {
+      if (added && !confirm(`「${entry.title}」はすでに本棚にあります。もう1冊追加しますか？`)) return;
+      try {
+        if (await addSample(entry)) {
+          closeSheets();
+          await renderLibrary();
+        }
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+    li.append(b);
+    list.append(li);
+  }
 }
 
 // ===== リーダー =====
@@ -642,7 +704,7 @@ function bindUi() {
     if (!file) return;
     try {
       const raw = await readTextFile(file);
-      if (await addBookFromText(raw, file.name.replace(/\.[^.]+$/, ''))) await renderLibrary();
+      if (await addBookFromText(raw, { fallbackTitle: file.name.replace(/\.[^.]+$/, '') })) await renderLibrary();
     } catch (err) {
       alert('読み込みに失敗しました: ' + err.message);
     }
@@ -655,20 +717,13 @@ function bindUi() {
   });
   $('paste-save').addEventListener('click', async () => {
     const raw = $('paste-text').value;
-    if (await addBookFromText(raw, '', $('paste-title').value.trim())) {
+    if (await addBookFromText(raw, { overrideTitle: $('paste-title').value.trim() })) {
       closeSheets();
       await renderLibrary();
     }
   });
 
-  $('sample-btn').addEventListener('click', async () => {
-    try {
-      await addSample();
-      await renderLibrary();
-    } catch (err) {
-      alert(err.message);
-    }
-  });
+  $('sample-btn').addEventListener('click', openSampleList);
 
   // アプリを離れたら停止して位置を保存
   document.addEventListener('visibilitychange', () => {
@@ -714,11 +769,12 @@ async function init() {
     navigator.serviceWorker.register('sw.js').catch(console.error);
   }
 
-  // 初回だけサンプルを入れておく
+  // 初回だけ、一覧のいちばん古いサンプルを入れておく
   try {
     const books = await store.listBooks();
     if (!books.length && !localStorage.getItem(SAMPLE_FLAG_KEY)) {
-      await addSample();
+      const samples = await fetchSampleIndex();
+      if (samples.length) await addSample(samples[samples.length - 1]);
       localStorage.setItem(SAMPLE_FLAG_KEY, '1');
     }
   } catch (err) {
