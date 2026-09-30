@@ -353,6 +353,19 @@ button { touch-action: manipulation; }
 }
 .speed-row input, .form .row input[type="range"] { flex: 1; min-width: 0; accent-color: var(--accent); }
 .speed-row .label { color: var(--muted); flex-shrink: 0; }
+.speed-row { gap: 6px; }
+.step-btn {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.step-btn:active { background: var(--line); }
 .value { min-width: 5.5em; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 
 /* ===== シート ===== */

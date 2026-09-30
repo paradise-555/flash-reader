@@ -1057,6 +1057,8 @@ function bindUi() {
     openSheet('settings-sheet');
   });
   $('play').addEventListener('click', togglePlay);
+  $('speed-down').addEventListener('click', () => changeSpeed(-100));
+  $('speed-up').addEventListener('click', () => changeSpeed(100));
   $('prev').addEventListener('click', () => step(-1));
   $('next').addEventListener('click', () => step(1));
   $('prev-para').addEventListener('click', () => paraStep(-1));
