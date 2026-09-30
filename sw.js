@@ -1,6 +1,6 @@
 // オフライン対応: ネット優先、つながらなければキャッシュを使う
 // （更新がすぐ反映されるよう、キャッシュ優先にはしていない）
-const CACHE = 'flash-reader-v9';
+const CACHE = 'flash-reader-v10';
 const ASSETS = [
   './',
   'index.html',
