@@ -509,10 +509,12 @@ function openSheet(id) {
   closeSheets();
   $('backdrop').hidden = false;
   $(id).hidden = false;
+  document.documentElement.classList.add('sheet-open'); // 背景のスクロールを止める
   sheetOpenedAt = Date.now();
 }
 
 function closeSheets() {
+  document.documentElement.classList.remove('sheet-open');
   $('backdrop').hidden = true;
   for (const s of document.querySelectorAll('.sheet')) s.hidden = true;
 }
@@ -584,8 +586,13 @@ function openContext() {
   });
 
   openSheet('context-sheet');
-  // 描画が終わってからスクロールする
-  requestAnimationFrame(() => curEl?.scrollIntoView({ block: 'center' }));
+  // 今の位置が本文エリアの中央に来るよう、スクロール量を直接計算する
+  // （scrollIntoView は iOS で背景ごと動かすことがあるため使わない）
+  if (curEl) {
+    const b = body.getBoundingClientRect();
+    const r = curEl.getBoundingClientRect();
+    body.scrollTop += r.top - b.top - (b.height - r.height) / 2;
+  }
 }
 
 // 段落の種類ごとの見た目（見出しの階層・箇条書き・図表の案内）
