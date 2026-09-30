@@ -139,8 +139,22 @@
 </section>
 
 <section id="context-sheet" class="sheet tall" hidden aria-label="本文">
-  <div class="sheet-head"><h2>本文</h2><span class="sheet-note">タップした位置から再開</span><button type="button" class="text-btn" data-close>閉じる</button></div>
-  <div id="context-body" class="context-body"></div>
+  <div class="sheet-head">
+    <h2>本文</h2>
+    <div class="head-tools">
+      <button type="button" id="ctx-toc-btn" class="pill-btn" aria-pressed="false">目次</button>
+      <button type="button" id="ctx-here-btn" class="pill-btn">今の位置</button>
+    </div>
+    <button type="button" class="text-btn" data-close>閉じる</button>
+  </div>
+  <div class="ctx-wrap">
+    <div id="context-body" class="context-body"></div>
+    <div id="ctx-toc" class="ctx-toc" hidden>
+      <div class="ctx-toc-panel">
+        <ul id="ctx-toc-list" class="chapter-list"></ul>
+      </div>
+    </div>
+  </div>
 </section>
 
 <section id="sample-sheet" class="sheet" hidden aria-label="サンプル一覧">

@@ -393,9 +393,9 @@ button { touch-action: manipulation; }
   overflow: hidden;
   padding-bottom: 0;
 }
+.ctx-wrap { position: relative; flex: 1; min-height: 0; }
 .sheet.tall .context-body {
-  flex: 1;
-  min-height: 0;
+  height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -405,7 +405,30 @@ button { touch-action: manipulation; }
 /* シートを開いている間は背景をスクロールさせない */
 html.sheet-open, html.sheet-open body { overflow: hidden; }
 .backdrop { touch-action: none; }
-.sheet-note { flex: 1; margin-left: 10px; font-size: 11px; color: var(--muted); }
+.head-tools { flex: 1; display: flex; gap: 6px; margin-left: 12px; }
+.pill-btn {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  padding: 5px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.pill-btn:disabled { opacity: 0.4; cursor: default; }
+.pill-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+/* 本文の上に重ねる目次。下の暗い部分を押すと閉じる */
+.ctx-toc { position: absolute; inset: 0; z-index: 3; background: rgba(0, 0, 0, 0.35); }
+.ctx-toc-panel {
+  position: relative;
+  max-height: 78%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  padding: 0 4px 8px;
+}
 .context-body {
   font-family: var(--font-read);
   font-size: 16px;

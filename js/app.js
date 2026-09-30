@@ -523,36 +523,51 @@ function isSheetOpen() {
   return !$('backdrop').hidden;
 }
 
-function openChapters() {
-  pause();
-  const list = $('chapter-list');
+/**
+ * 目次リストを描画する（再生画面の目次と本文シートの目次で共通）。
+ * @param {HTMLElement} list ul 要素
+ * @param {Array<{title: string, level: number, page: string}>} items 見出し
+ * @param {object|null} current 色付けする項目
+ * @param {(item: object) => void} onPick 項目を押したときの処理
+ */
+function renderToc(list, items, current, onPick) {
   list.replaceChildren();
-  const cur = currentChapter();
   // いちばん浅い見出しを字下げ 0 にする
-  const minLevel = Math.min(...state.chapters.map((ch) => ch.level), 99);
-  const top = { title: '（最初から）', idx: 0, level: minLevel };
-  for (const ch of [top, ...state.chapters]) {
+  const minLevel = Math.min(...items.map((it) => it.level), 99);
+  for (const it of items) {
     const li = document.createElement('li');
     const b = document.createElement('button');
     b.type = 'button';
-    b.textContent = ch.title;
-    b.style.paddingLeft = `${4 + Math.max(0, ch.level - minLevel) * 16}px`;
-    b.classList.toggle('sub', ch.level > minLevel);
-    const page = pageAt(state.book.pages, state.chunks[ch.idx]?.start ?? 0);
-    if (page && ch !== top) {
+    b.textContent = it.title;
+    b.style.paddingLeft = `${4 + Math.max(0, it.level - minLevel) * 16}px`;
+    b.classList.toggle('sub', it.level > minLevel);
+    if (it.page) {
       const pg = document.createElement('span');
       pg.className = 'toc-page';
-      pg.textContent = `p.${page}`;
+      pg.textContent = `p.${it.page}`;
       b.append(pg);
     }
-    if (cur ? ch === cur : ch === top) b.classList.add('current');
-    b.addEventListener('click', () => {
-      closeSheets();
-      goTo(ch.idx);
-    });
+    if (it === current) b.classList.add('current');
+    b.addEventListener('click', () => onPick(it));
     li.append(b);
     list.append(li);
   }
+}
+
+function openChapters() {
+  pause();
+  const cur = currentChapter();
+  const minLevel = Math.min(...state.chapters.map((ch) => ch.level), 99);
+  const top = { title: '（最初から）', idx: 0, level: minLevel, page: '' };
+  const items = [
+    top,
+    ...state.chapters.map((ch) => ({ ...ch, page: pageAt(state.book.pages, state.chunks[ch.idx]?.start ?? 0) })),
+  ];
+  const current = cur ? items.find((it) => it.idx === cur.idx) : top;
+  renderToc($('chapter-list'), items, current, (it) => {
+    closeSheets();
+    goTo(it.idx);
+  });
   openSheet('chapter-sheet');
 }
 
@@ -585,14 +600,44 @@ function openContext() {
     body.append(el);
   });
 
+  // 本文シート内の目次（見出しを押すと、その見出しまで本文をスクロールする）
+  const heads = state.book.paras
+    .map((p, pi) => ({ p, pi }))
+    .filter(({ p }) => p.kind === 'heading')
+    .map(({ p, pi }) => ({ title: p.text, level: p.level, page: pageAt(state.book.pages, p.start), para: pi }));
+  let current = null;
+  for (const h of heads) if (h.para <= c.para) current = h;
+  renderToc($('ctx-toc-list'), heads, current, (h) => {
+    setCtxToc(false);
+    const el = body.querySelector(`[data-para="${h.para}"]`);
+    if (el) scrollBodyTo(el, 'top');
+  });
+  setCtxToc(false);
+  $('ctx-toc-btn').disabled = heads.length === 0; // 見出しのない文章では押せない
+
   openSheet('context-sheet');
-  // 今の位置が本文エリアの中央に来るよう、スクロール量を直接計算する
-  // （scrollIntoView は iOS で背景ごと動かすことがあるため使わない）
-  if (curEl) {
-    const b = body.getBoundingClientRect();
-    const r = curEl.getBoundingClientRect();
-    body.scrollTop += r.top - b.top - (b.height - r.height) / 2;
+  if (curEl) scrollBodyTo(curEl, 'center');
+}
+
+// 本文シートの目次の表示・非表示
+function setCtxToc(show) {
+  $('ctx-toc').hidden = !show;
+  $('ctx-toc-btn').setAttribute('aria-pressed', String(show));
+  if (show) {
+    // 今の見出しが見える位置まで目次をスクロールする
+    const panel = document.querySelector('.ctx-toc-panel');
+    const cur = panel.querySelector('.current');
+    panel.scrollTop = cur ? cur.offsetTop - panel.clientHeight / 2 : 0;
   }
+}
+
+// 本文エリア内で el が見える位置までスクロールする（'center' は中央、'top' は上端付近）
+// scrollIntoView は iOS で背景ごと動かすことがあるため、スクロール量を直接計算する
+function scrollBodyTo(el, align) {
+  const body = $('context-body');
+  const b = body.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  body.scrollTop += align === 'center' ? r.top - b.top - (b.height - r.height) / 2 : r.top - b.top - 8;
 }
 
 // 段落の種類ごとの見た目（見出しの階層・箇条書き・図表の案内）
@@ -775,6 +820,18 @@ function bindUi() {
     if (Date.now() - sheetOpenedAt > 400) closeSheets();
   });
   for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', closeSheets);
+
+  // 本文シートの［目次］［今の位置］
+  $('ctx-toc-btn').addEventListener('click', () => setCtxToc($('ctx-toc').hidden));
+  $('ctx-here-btn').addEventListener('click', () => {
+    setCtxToc(false);
+    const cur = document.querySelector('#context-body .current');
+    if (cur) scrollBodyTo(cur, 'center');
+  });
+  // 目次の下の暗い部分を押したら閉じる
+  $('ctx-toc').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) setCtxToc(false);
+  });
 
   // 本文のタップした文字の位置から再開する
   $('context-body').addEventListener('click', (e) => {
