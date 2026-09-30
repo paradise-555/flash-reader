@@ -209,9 +209,29 @@ function folderItem(folder, books) {
 
   const tools = document.createElement('div');
   tools.className = 'item-tools';
-  tools.append(dragHandle());
+  const rename = document.createElement('button');
+  rename.type = 'button';
+  rename.className = 'pill-btn';
+  rename.textContent = '名前変更';
+  rename.addEventListener('click', () => renameFolder(folder.id));
+  tools.append(rename, dragHandle());
   li.append(open, tools);
   return li;
+}
+
+async function renameFolder(id) {
+  const folders = await store.listFolders();
+  const folder = folders.find((f) => f.id === id);
+  if (!folder) return;
+  const name = prompt('新しいフォルダ名', folder.name)?.trim();
+  if (!name || name === folder.name) return;
+  if (folders.some((f) => f.name === name)) {
+    alert('同じ名前のフォルダがあります。');
+    return;
+  }
+  folder.name = name;
+  await store.putFolders([folder]);
+  await renderLibrary();
 }
 
 function dragHandle() {
@@ -1116,20 +1136,7 @@ function bindUi() {
     await store.putFolders([{ id: newId(), name, order: await nextOrder(null), addedAt: Date.now() }]);
     await renderLibrary();
   });
-  $('folder-rename').addEventListener('click', async () => {
-    const folders = await store.listFolders();
-    const folder = folders.find((f) => f.id === state.libFolder);
-    if (!folder) return;
-    const name = prompt('新しいフォルダ名', folder.name)?.trim();
-    if (!name || name === folder.name) return;
-    if (folders.some((f) => f.name === name)) {
-      alert('同じ名前のフォルダがあります。');
-      return;
-    }
-    folder.name = name;
-    await store.putFolders([folder]);
-    await renderLibrary();
-  });
+  $('folder-rename').addEventListener('click', () => renameFolder(state.libFolder));
   $('folder-delete').addEventListener('click', async () => {
     const folders = await store.listFolders();
     const folder = folders.find((f) => f.id === state.libFolder);
