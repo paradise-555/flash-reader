@@ -324,6 +324,7 @@ button { touch-action: manipulation; }
 .sheet-head {
   position: sticky;
   top: 0;
+  z-index: 2; /* 本文（content-visibility で重なり順が変わる）より手前に出す */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -379,12 +380,45 @@ button { touch-action: manipulation; }
 .chapter-list .sample-item { display: flex; flex-direction: column; gap: 4px; line-height: 1.5; }
 .sample-meta { font-family: var(--font-ui); font-size: 12px; color: var(--muted); }
 
-.context-body { font-family: var(--font-read); font-size: 17px; line-height: 2; }
-.context-body p, .context-body h3 { margin: 0 0 12px; }
-.context-body h3 { font-size: 17px; color: var(--accent); }
-.ctx-chunk { cursor: pointer; border-radius: 4px; }
-.ctx-chunk.current { background: var(--accent); color: var(--accent-text); }
-.ctx-chunk.current mark { background: transparent; color: inherit; }
+/* 本文シート（長押し）: 本のページのように組む */
+.sheet.tall { max-height: 90vh; max-height: 90dvh; }
+.sheet-note { flex: 1; margin-left: 10px; font-size: 11px; color: var(--muted); }
+.context-body {
+  font-family: var(--font-read);
+  font-size: 16px;
+  line-height: 1.95;
+  letter-spacing: 0.02em;
+  padding: 4px 2px 24px;
+  overflow-wrap: anywhere;
+}
+.context-body > * { cursor: pointer; content-visibility: auto; contain-intrinsic-size: auto 3em; }
+.ctx-p { margin: 0 0 0.9em; text-indent: 1em; }
+.ctx-li { margin: 0 0 0.4em; padding-left: 1em; text-indent: -1em; }
+.ctx-li + .ctx-p, .ctx-fig + .ctx-p { margin-top: 0.8em; }
+.ctx-fig {
+  margin: 0.6em 0 1em;
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+.ctx-h { margin: 1.6em 0 0.6em; line-height: 1.5; font-weight: 700; }
+.ctx-h.lv1, .ctx-h.lv2 { font-size: 20px; color: var(--accent); padding-bottom: 4px; border-bottom: 2px solid var(--accent); }
+.ctx-h.lv3 { font-size: 18px; color: var(--accent); }
+.ctx-h.lv4 { font-size: 16px; padding-left: 8px; border-left: 4px solid var(--accent); }
+.ctx-h.lv5, .ctx-h.lv6 { font-size: 15px; margin-top: 1.2em; }
+.ctx-h.ctx-box {
+  font-size: 15px;
+  color: var(--accent);
+  background: var(--mark-bg);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+.context-body > :first-child { margin-top: 0; }
+.context-body .current { background: var(--accent); color: var(--accent-text); border-radius: 3px; }
+.context-body .current mark { background: transparent; color: inherit; }
 
 /* PC など広い画面では操作部を中央寄せ */
 @media (min-width: 720px) {

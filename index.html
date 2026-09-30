@@ -57,7 +57,7 @@
       <div id="word"></div>
       <span class="guide guide-b"></span>
     </div>
-    <p id="hint" class="hint">タップで再生・停止　左右スワイプで1文節移動　長押しで前後の文</p>
+    <p id="hint" class="hint">タップで再生・停止　左右スワイプで1文節移動　長押しで本文</p>
   </main>
 
   <footer class="controls">
@@ -138,10 +138,9 @@
   <ul id="chapter-list" class="chapter-list"></ul>
 </section>
 
-<section id="context-sheet" class="sheet" hidden aria-label="前後の文">
-  <div class="sheet-head"><h2>前後の文</h2><button type="button" class="text-btn" data-close>閉じる</button></div>
+<section id="context-sheet" class="sheet tall" hidden aria-label="本文">
+  <div class="sheet-head"><h2>本文</h2><span class="sheet-note">タップした位置から再開</span><button type="button" class="text-btn" data-close>閉じる</button></div>
   <div id="context-body" class="context-body"></div>
-  <p class="note">語をタップするとその位置へ移動します</p>
 </section>
 
 <section id="sample-sheet" class="sheet" hidden aria-label="サンプル一覧">

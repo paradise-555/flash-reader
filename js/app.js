@@ -554,47 +554,103 @@ function openChapters() {
   openSheet('chapter-sheet');
 }
 
-// 現在の段落と前後1段落を表示する
+// 本文全体を読みやすく組んで表示し、今の位置までスクロールする
 function openContext() {
   pause();
-  const cs = state.chunks;
-  const c = cs[state.idx];
+  const c = state.chunks[state.idx];
   if (!c) return;
   const body = $('context-body');
   body.replaceChildren();
-  let lastPara = -1;
-  let pEl = null;
-  let curEl = null;
-  // ページの始まり（字位置 → ページ番号）。段落の先頭で一致したら番号を出す
+  // ページの始まり（字位置 → ページ番号）。段落の先頭で一致したら区切りを出す
   const pageStarts = new Map(state.book.pages.map((p) => [p.offset, p.label]));
-  let i = state.idx;
-  while (i > 0 && cs[i - 1].para >= c.para - 1) i--;
-  for (; i < cs.length && cs[i].para <= c.para + 1; i++) {
-    const k = cs[i];
-    if (k.para !== lastPara) {
-      const label = pageStarts.get(state.book.paras[k.para].start);
-      if (label) {
-        const pg = document.createElement('div');
-        pg.className = 'ctx-page';
-        pg.textContent = `p.${label}`;
-        body.append(pg);
-      }
-      pEl = document.createElement(k.kind === 'heading' ? 'h3' : 'p');
-      body.append(pEl);
-      lastPara = k.para;
+  let curEl = null;
+
+  state.book.paras.forEach((p, pi) => {
+    const label = pageStarts.get(p.start);
+    if (label) {
+      const pg = document.createElement('div');
+      pg.className = 'ctx-page';
+      pg.textContent = `p.${label}`;
+      body.append(pg);
     }
-    const s = document.createElement('span');
-    s.className = 'ctx-chunk';
-    s.dataset.i = i;
-    s.append(...renderText(k.text, settings.emphHighlight ? k.emph : []));
-    if (i === state.idx) {
-      s.classList.add('current');
-      curEl = s;
-    }
-    pEl.append(s);
-  }
+    const el = document.createElement(p.kind === 'heading' ? 'h3' : 'p');
+    el.className = paraClass(p);
+    el.dataset.para = pi;
+    // 今のチャンクがこの段落にあれば、その範囲を色付けする
+    const cur = pi === c.para ? [c.start - p.start, c.end - p.start] : null;
+    el.append(...renderRich(p.text, settings.emphHighlight ? p.emph : [], cur));
+    if (cur) curEl = el.querySelector('.current') ?? el;
+    body.append(el);
+  });
+
   openSheet('context-sheet');
-  curEl?.scrollIntoView({ block: 'center' });
+  // 描画が終わってからスクロールする
+  requestAnimationFrame(() => curEl?.scrollIntoView({ block: 'center' }));
+}
+
+// 段落の種類ごとの見た目（見出しの階層・箇条書き・図表の案内）
+function paraClass(p) {
+  if (p.kind === 'heading') {
+    const t = p.text;
+    if (/^(POINT|コラム|COLUMN)/.test(t)) return 'ctx-h ctx-box';
+    return `ctx-h lv${Math.min(p.level, 6)}`;
+  }
+  if (p.text.startsWith('・')) return 'ctx-li';
+  if (/^（図表/.test(p.text)) return 'ctx-fig';
+  return 'ctx-p';
+}
+
+// 重要語（mark）と現在位置（span.current）を重ねて描画する
+function renderRich(text, emph, cur) {
+  const cuts = new Set([0, text.length]);
+  for (const [s, e] of emph) cuts.add(s).add(e);
+  if (cur) cuts.add(Math.max(0, cur[0])).add(Math.min(text.length, cur[1]));
+  const points = [...cuts].sort((a, b) => a - b);
+  const nodes = [];
+  let curSpan = null;
+  for (let k = 0; k < points.length - 1; k++) {
+    const s = points[k];
+    const e = points[k + 1];
+    if (s >= e) continue;
+    const piece = text.slice(s, e);
+    const inEmph = emph.some(([es, ee]) => es <= s && e <= ee);
+    const node = inEmph ? Object.assign(document.createElement('mark'), { textContent: piece }) : document.createTextNode(piece);
+    if (cur && cur[0] <= s && e <= cur[1]) {
+      if (!curSpan) {
+        curSpan = document.createElement('span');
+        curSpan.className = 'current';
+        nodes.push(curSpan);
+      }
+      curSpan.append(node);
+    } else {
+      nodes.push(node);
+    }
+  }
+  return nodes;
+}
+
+// タップした文字の位置（段落内の字数）を求める
+function caretOffsetInPara(el, x, y) {
+  let node;
+  let offset;
+  if (document.caretPositionFromPoint) {
+    const pos = document.caretPositionFromPoint(x, y);
+    if (!pos) return 0;
+    node = pos.offsetNode;
+    offset = pos.offset;
+  } else if (document.caretRangeFromPoint) {
+    const r = document.caretRangeFromPoint(x, y);
+    if (!r) return 0;
+    node = r.startContainer;
+    offset = r.startOffset;
+  } else {
+    return 0;
+  }
+  if (!el.contains(node)) return 0;
+  const range = document.createRange();
+  range.setStart(el, 0);
+  range.setEnd(node, offset);
+  return range.toString().length;
 }
 
 // ===== 操作 =====
@@ -713,11 +769,14 @@ function bindUi() {
   });
   for (const b of document.querySelectorAll('[data-close]')) b.addEventListener('click', closeSheets);
 
+  // 本文のタップした文字の位置から再開する
   $('context-body').addEventListener('click', (e) => {
-    const s = e.target.closest('.ctx-chunk');
-    if (!s) return;
+    const el = e.target.closest('[data-para]');
+    if (!el) return;
+    const p = state.book.paras[Number(el.dataset.para)];
+    const local = p.kind === 'heading' ? 0 : caretOffsetInPara(el, e.clientX, e.clientY);
     closeSheets();
-    goTo(Number(s.dataset.i));
+    goTo(indexForOffset(p.start + Math.min(local, p.text.length - 1)));
   });
 
   $('file-input').addEventListener('change', async (e) => {
