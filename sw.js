@@ -1,6 +1,6 @@
 // オフライン対応: ネット優先、つながらなければキャッシュを使う
 // （更新がすぐ反映されるよう、キャッシュ優先にはしていない）
-const CACHE = 'flash-reader-v6';
+const CACHE = 'flash-reader-v8';
 const ASSETS = [
   './',
   'index.html',
@@ -20,7 +20,12 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches
+      .open(CACHE)
+      .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -36,7 +41,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(req)
+    // GitHub Pages は max-age=600 で配信するため、毎回サーバーに更新を確認する
+    fetch(req, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

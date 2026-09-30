@@ -911,6 +911,16 @@ async function init() {
   navigator.storage?.persist?.().catch(() => {});
 
   if ('serviceWorker' in navigator && window.isSecureContext) {
+    // 新しい版の Service Worker に切り替わったら、1回だけ再読み込みして新しいファイルを使う
+    // （初回インストール時は元々の制御者がいないので再読み込みしない）
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      pause();
+      location.reload();
+    });
     navigator.serviceWorker.register('sw.js').catch(console.error);
   }
 
