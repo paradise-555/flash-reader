@@ -19,8 +19,18 @@
 <!-- 本棚 -->
 <section id="library" class="screen">
   <header class="bar">
-    <h1 class="app-title">フラッシュ速読</h1>
+    <button type="button" id="lib-back" class="icon-btn" aria-label="本棚へ戻る" hidden>
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <h1 id="lib-title" class="app-title">フラッシュ速読</h1>
+    <button type="button" id="lib-edit" class="text-btn lib-edit">編集</button>
   </header>
+  <div id="edit-bar" class="edit-bar" hidden>
+    <button type="button" id="folder-add" class="pill-btn">＋フォルダ</button>
+    <button type="button" id="folder-rename" class="pill-btn">名前変更</button>
+    <button type="button" id="folder-delete" class="pill-btn">フォルダを削除</button>
+    <span class="edit-hint">≡ をつまんで並べ替え</span>
+  </div>
   <main class="lib-main">
     <ul id="book-list" class="book-list"></ul>
     <p id="empty-msg" class="empty" hidden>本がありません。<br>下のボタンから追加してください。</p>
@@ -29,7 +39,7 @@
   <footer class="lib-actions">
     <label class="btn">
       ファイルから追加
-      <input type="file" id="file-input" class="visually-hidden" accept=".txt,.md,text/plain">
+      <input type="file" id="file-input" class="visually-hidden" accept=".txt,.md,text/plain" multiple>
     </label>
     <button type="button" class="btn" id="paste-btn">貼り付けで追加</button>
     <button type="button" class="btn ghost" id="sample-btn">サンプル一覧から追加</button>
@@ -155,6 +165,11 @@
       </div>
     </div>
   </div>
+</section>
+
+<section id="move-sheet" class="sheet" hidden aria-label="移動先">
+  <div class="sheet-head"><h2 id="move-title">移動先</h2><button type="button" class="text-btn" data-close>閉じる</button></div>
+  <ul id="move-list" class="chapter-list"></ul>
 </section>
 
 <section id="sample-sheet" class="sheet" hidden aria-label="サンプル一覧">

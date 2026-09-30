@@ -10,6 +10,9 @@ const EMPH_RE = /【([^【】\n]+)】|\*\*([^*\n]+?)\*\*/g;
 const HEADING_RE = /^(#{1,6})[ 　]+(.+)$/;
 // 元の本のページ番号: "%p 9" の1行（画面には出さない）。以降の段落がそのページ
 const PAGE_RE = /^%p[ 　]*(\S+)$/;
+// 取り込み時の置き場所: "%folder フォルダ名" と "%order 並び順（数値）"（画面には出さない）
+const FOLDER_RE = /^%folder[ 　]+(.+)$/;
+const ORDER_RE = /^%order[ 　]*(-?\d+(?:\.\d+)?)$/;
 // 文末（ここを越えてまとめない）
 const HARD_END_RE = /[。．！？!?」』]$/;
 // 読点類（最小字数を満たしていればここで区切る）
@@ -27,7 +30,8 @@ const MAX_CHARS = 20;
  * - "%p 9" の行は元の本のページ番号（pages に記録し、本文には含めない）
  * - それ以外の空でない行は1行=1段落
  * - 青空文庫形式のルビ（｜ 《》）は除去する
- * @returns {{title: string, paras: Array, pages: Array<{offset: number, label: string}>, totalChars: number}}
+ * - "%folder 名前" "%order 数値" は取り込み先フォルダと並び順（本文には含めない）
+ * @returns {{title: string, folder: string, order: number|null, paras: Array, pages: Array<{offset: number, label: string}>, totalChars: number}}
  */
 export function parseBook(raw) {
   const text = raw
@@ -36,12 +40,24 @@ export function parseBook(raw) {
     .replace(/｜/g, '')
     .replace(/《[^》\n]*》/g, '');
   let title = '';
+  let folder = '';
+  let order = null;
   const paras = [];
   const pages = [];
   let offset = 0;
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trim();
     if (!line) continue;
+    const fd = line.match(FOLDER_RE);
+    if (fd) {
+      folder = fd[1].trim();
+      continue;
+    }
+    const od = line.match(ORDER_RE);
+    if (od) {
+      order = Number(od[1]);
+      continue;
+    }
     const pg = line.match(PAGE_RE);
     if (pg) {
       // 同じ位置に続けて書かれた場合は後のものを採用する
@@ -67,7 +83,7 @@ export function parseBook(raw) {
     paras.push({ kind: 'text', text: plain, emph, start: offset });
     offset += plain.length;
   }
-  return { title, paras, pages, totalChars: offset };
+  return { title, folder, order, paras, pages, totalChars: offset };
 }
 
 // 重要語の記号を外し、段落内での位置 [開始, 終了) を記録する

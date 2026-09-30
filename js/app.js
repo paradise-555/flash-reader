@@ -55,6 +55,8 @@ const state = {
   timer: 0,
   wakeLock: null,
   lastSave: 0,
+  libFolder: null, // 本棚で開いているフォルダの id（null = 本棚直下）
+  libEdit: false, // 本棚の編集モード
 };
 
 // ===== 本棚 =====
@@ -66,52 +68,282 @@ async function showLibrary() {
   await renderLibrary();
 }
 
+const ICON_DEL = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const ICON_HANDLE = '<svg viewBox="0 0 24 24"><path d="M5 8h14M5 12h14M5 16h14"/></svg>';
+const ICON_FOLDER = '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+
+// 並び順を持たない古い本（v1 のデータ）に、最近開いた順で並び順を振る
+async function ensureOrders(books) {
+  const missing = books.filter((b) => typeof b.order !== 'number');
+  if (!missing.length) return;
+  const maxOrder = Math.max(0, ...books.filter((b) => typeof b.order === 'number').map((b) => b.order));
+  missing.sort((a, b) => (b.openedAt || b.addedAt) - (a.openedAt || a.addedAt));
+  missing.forEach((b, i) => {
+    b.order = maxOrder + (i + 1) * 10;
+    if (b.folderId === undefined) b.folderId = null;
+  });
+  await store.updateBooks(missing);
+}
+
+function pctOf(offset, total) {
+  return total ? Math.min(100, Math.round((offset / total) * 100)) : 0;
+}
+
 async function renderLibrary() {
-  const books = await store.listBooks();
-  books.sort((a, b) => (b.openedAt || b.addedAt) - (a.openedAt || a.addedAt));
+  const [books, folders] = await Promise.all([store.listBooks(), store.listFolders()]);
+  await ensureOrders(books);
+  // 開いていたフォルダが消えていたら本棚直下に戻る
+  const folder = folders.find((f) => f.id === state.libFolder) ?? null;
+  if (!folder) state.libFolder = null;
+
+  // ヘッダーと編集バー
+  $('lib-title').textContent = folder ? folder.name : 'フラッシュ速読';
+  $('lib-back').hidden = !folder;
+  $('lib-edit').textContent = state.libEdit ? '完了' : '編集';
+  $('edit-bar').hidden = !state.libEdit;
+  $('folder-add').hidden = !!folder;
+  $('folder-rename').hidden = !folder;
+  $('folder-delete').hidden = !folder;
+  $('library').classList.toggle('editing', state.libEdit);
+
+  // 表示する項目（本棚直下 = フォルダ + フォルダに入っていない本 / フォルダ内 = その本）
+  const items = folder
+    ? books.filter((b) => b.folderId === folder.id).map((b) => ({ kind: 'book', data: b }))
+    : [
+        ...folders.map((f) => ({ kind: 'folder', data: f })),
+        ...books.filter((b) => !b.folderId).map((b) => ({ kind: 'book', data: b })),
+      ];
+  items.sort((a, b) => a.data.order - b.data.order);
+
   const list = $('book-list');
   list.replaceChildren();
-  $('empty-msg').hidden = books.length > 0;
-  for (const meta of books) {
-    const pct = meta.totalChars ? Math.min(100, Math.round((meta.offset / meta.totalChars) * 100)) : 0;
-    const li = document.createElement('li');
-    li.className = 'book-item';
+  $('empty-msg').hidden = items.length > 0;
+  $('empty-msg').innerHTML = folder
+    ? 'このフォルダは空です。<br>［編集］から本を移動するか、下のボタンで追加してください。'
+    : '本がありません。<br>下のボタンから追加してください。';
 
-    const open = document.createElement('button');
-    open.type = 'button';
-    open.className = 'book-open';
-    const t = document.createElement('span');
-    t.className = 't';
-    t.textContent = meta.title;
-    const m = document.createElement('span');
-    m.className = 'm';
-    m.textContent = `${fmtNum(meta.totalChars)}字 ・ ${pct}%`;
-    const p = document.createElement('span');
-    p.className = 'p';
-    const bar = document.createElement('i');
-    bar.style.width = pct + '%';
-    p.append(bar);
-    open.append(t, m, p);
-    open.addEventListener('click', () => openBook(meta));
-
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'icon-btn book-del';
-    del.setAttribute('aria-label', `「${meta.title}」を削除`);
-    del.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>';
-    del.addEventListener('click', async () => {
-      if (!confirm(`「${meta.title}」を削除しますか？\n読んだ位置も消えます。`)) return;
-      await store.deleteBook(meta.id);
-      await renderLibrary();
-    });
-
-    li.append(open, del);
+  for (const it of items) {
+    const li = it.kind === 'folder' ? folderItem(it.data, books) : bookItem(it.data);
+    li.dataset.kind = it.kind;
+    li.dataset.id = it.data.id;
     list.append(li);
   }
 }
 
+function bookItem(meta) {
+  const pct = pctOf(meta.offset, meta.totalChars);
+  const li = document.createElement('li');
+  li.className = 'book-item';
+
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'book-open';
+  const t = document.createElement('span');
+  t.className = 't';
+  t.textContent = meta.title;
+  const m = document.createElement('span');
+  m.className = 'm';
+  m.textContent = `${fmtNum(meta.totalChars)}字 ・ ${pct}%`;
+  const p = document.createElement('span');
+  p.className = 'p';
+  const bar = document.createElement('i');
+  bar.style.width = pct + '%';
+  p.append(bar);
+  open.append(t, m, p);
+  open.addEventListener('click', () => {
+    if (!state.libEdit) openBook(meta);
+  });
+
+  const tools = document.createElement('div');
+  tools.className = 'item-tools';
+  const move = document.createElement('button');
+  move.type = 'button';
+  move.className = 'pill-btn';
+  move.textContent = '移動';
+  move.addEventListener('click', () => openMoveSheet(meta));
+  const del = document.createElement('button');
+  del.type = 'button';
+  del.className = 'icon-btn book-del';
+  del.setAttribute('aria-label', `「${meta.title}」を削除`);
+  del.innerHTML = ICON_DEL;
+  del.addEventListener('click', async () => {
+    if (!confirm(`「${meta.title}」を削除しますか？\n読んだ位置も消えます。`)) return;
+    await store.deleteBook(meta.id);
+    await renderLibrary();
+  });
+  tools.append(move, del, dragHandle());
+
+  li.append(open, tools);
+  return li;
+}
+
+function folderItem(folder, books) {
+  const inside = books.filter((b) => b.folderId === folder.id);
+  const total = inside.reduce((a, b) => a + b.totalChars, 0);
+  const read = inside.reduce((a, b) => a + Math.min(b.offset, b.totalChars), 0);
+  const pct = pctOf(read, total);
+
+  const li = document.createElement('li');
+  li.className = 'book-item folder-item';
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'book-open';
+  const t = document.createElement('span');
+  t.className = 't';
+  t.innerHTML = ICON_FOLDER;
+  t.append(document.createTextNode(folder.name));
+  const m = document.createElement('span');
+  m.className = 'm';
+  m.textContent = `${inside.length}冊 ・ ${fmtNum(total)}字 ・ ${pct}%`;
+  const p = document.createElement('span');
+  p.className = 'p';
+  const bar = document.createElement('i');
+  bar.style.width = pct + '%';
+  p.append(bar);
+  open.append(t, m, p);
+  open.addEventListener('click', () => {
+    if (state.libEdit) return;
+    state.libFolder = folder.id;
+    renderLibrary();
+  });
+
+  const tools = document.createElement('div');
+  tools.className = 'item-tools';
+  tools.append(dragHandle());
+  li.append(open, tools);
+  return li;
+}
+
+function dragHandle() {
+  const h = document.createElement('span');
+  h.className = 'drag-handle';
+  h.setAttribute('aria-label', '並べ替え');
+  h.innerHTML = ICON_HANDLE;
+  return h;
+}
+
+// ≡ をつまんで上下にドラッグして並べ替える（編集モードのみ）
+function bindLibraryDrag() {
+  const list = $('book-list');
+  const main = document.querySelector('.lib-main');
+  let drag = null;
+
+  list.addEventListener('pointerdown', (e) => {
+    const handle = e.target.closest('.drag-handle');
+    if (!handle || !state.libEdit) return;
+    e.preventDefault();
+    const li = handle.closest('li');
+    // 指が項目の外に出てもドラッグを続けられるようにする（取れなくても並べ替え自体はできる）
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch {
+      // 何もしない
+    }
+    drag = { li, handle, startY: e.clientY, startTop: li.offsetTop, id: e.pointerId };
+    li.classList.add('dragging');
+  });
+
+  list.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { li } = drag;
+    // 指の位置が隣の項目の中央を越えたら入れ替える
+    const siblings = [...list.children].filter((c) => c !== li);
+    const y = e.clientY;
+    let before = null;
+    for (const s of siblings) {
+      const r = s.getBoundingClientRect();
+      if (y < r.top + r.height / 2) {
+        before = s;
+        break;
+      }
+    }
+    if (before !== li.nextElementSibling) list.insertBefore(li, before);
+    li.style.transform = `translateY(${e.clientY - drag.startY - (li.offsetTop - drag.startTop)}px)`;
+    // 端に近づいたら自動でスクロールする
+    const mr = main.getBoundingClientRect();
+    if (y < mr.top + 40) main.scrollTop -= 8;
+    else if (y > mr.bottom - 40) main.scrollTop += 8;
+  });
+
+  const end = async (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { li } = drag;
+    drag = null;
+    li.classList.remove('dragging');
+    li.style.transform = '';
+    await saveListOrder();
+  };
+  list.addEventListener('pointerup', end);
+  list.addEventListener('pointercancel', end);
+}
+
+// 画面の並び順を、そのまま保存する
+async function saveListOrder() {
+  const [books, folders] = await Promise.all([store.listBooks(), store.listFolders()]);
+  const changedBooks = [];
+  const changedFolders = [];
+  [...$('book-list').children].forEach((li, i) => {
+    const order = (i + 1) * 10;
+    const src = li.dataset.kind === 'folder' ? folders : books;
+    const item = src.find((x) => x.id === li.dataset.id);
+    if (item && item.order !== order) {
+      item.order = order;
+      (li.dataset.kind === 'folder' ? changedFolders : changedBooks).push(item);
+    }
+  });
+  if (changedBooks.length) await store.updateBooks(changedBooks);
+  if (changedFolders.length) await store.putFolders(changedFolders);
+}
+
+// 行き先（本棚直下 or フォルダ）の末尾の並び順
+async function nextOrder(folderId) {
+  const [books, folders] = await Promise.all([store.listBooks(), store.listFolders()]);
+  const orders = folderId
+    ? books.filter((b) => b.folderId === folderId).map((b) => b.order ?? 0)
+    : [...folders.map((f) => f.order ?? 0), ...books.filter((b) => !b.folderId).map((b) => b.order ?? 0)];
+  return Math.max(0, ...orders) + 10;
+}
+
+async function openMoveSheet(meta) {
+  const folders = (await store.listFolders()).sort((a, b) => a.order - b.order);
+  $('move-title').textContent = `「${meta.title}」の移動先`;
+  const list = $('move-list');
+  list.replaceChildren();
+  const dests = [{ id: null, name: '本棚（フォルダの外）' }, ...folders];
+  for (const d of dests) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = d.name;
+    if ((meta.folderId ?? null) === d.id) b.classList.add('current');
+    b.addEventListener('click', async () => {
+      closeSheets();
+      if ((meta.folderId ?? null) === d.id) return;
+      meta.folderId = d.id;
+      meta.order = await nextOrder(d.id);
+      await store.updateBook(meta);
+      await renderLibrary();
+    });
+    li.append(b);
+    list.append(li);
+  }
+  openSheet('move-sheet');
+}
+
+// 名前でフォルダを探し、無ければ本棚の末尾に作る
+async function getOrCreateFolder(name) {
+  const folders = await store.listFolders();
+  const found = folders.find((f) => f.name === name);
+  if (found) return found;
+  const folder = { id: newId(), name, order: await nextOrder(null), addedAt: Date.now() };
+  await store.putFolders([folder]);
+  return folder;
+}
+
 /**
  * 本文を解析して本棚に追加する。
+ * 置き場所: 本文に "%folder" があればそのフォルダ（無ければ作る）、なければ今開いているフォルダ。
+ * 並び順: 本文に "%order" があればその値、なければ末尾。
  * @param {string} raw 本文
  * @param {{fallbackTitle?: string, overrideTitle?: string, source?: string}} opts
  *   source: サンプル由来ならそのファイル名（追加済み判定に使う）
@@ -122,6 +354,7 @@ async function addBookFromText(raw, { fallbackTitle = '', overrideTitle = '', so
     alert('本文が空です。');
     return false;
   }
+  const folderId = book.folder ? (await getOrCreateFolder(book.folder)).id : state.libFolder;
   const meta = {
     id: newId(),
     title: overrideTitle || book.title || fallbackTitle || '無題',
@@ -129,6 +362,8 @@ async function addBookFromText(raw, { fallbackTitle = '', overrideTitle = '', so
     offset: 0,
     addedAt: Date.now(),
     openedAt: 0,
+    folderId: folderId ?? null,
+    order: book.order ?? (await nextOrder(folderId)),
   };
   if (source) meta.source = source;
   await store.addBook(meta, raw);
@@ -843,16 +1078,74 @@ function bindUi() {
     goTo(indexForOffset(p.start + Math.min(local, p.text.length - 1)));
   });
 
+  // 複数ファイルをまとめて追加（フォルダの自動作成が重ならないよう1つずつ順に処理する）
   $('file-input').addEventListener('change', async (e) => {
-    const file = e.target.files[0];
+    const files = [...e.target.files].sort((a, b) => a.name.localeCompare(b.name, 'ja', { numeric: true }));
     e.target.value = '';
-    if (!file) return;
-    try {
-      const raw = await readTextFile(file);
-      if (await addBookFromText(raw, { fallbackTitle: file.name.replace(/\.[^.]+$/, '') })) await renderLibrary();
-    } catch (err) {
-      alert('読み込みに失敗しました: ' + err.message);
+    if (!files.length) return;
+    const failed = [];
+    for (const file of files) {
+      try {
+        const raw = await readTextFile(file);
+        if (!(await addBookFromText(raw, { fallbackTitle: file.name.replace(/\.[^.]+$/, '') }))) failed.push(file.name);
+      } catch (err) {
+        failed.push(`${file.name}（${err.message}）`);
+      }
     }
+    await renderLibrary();
+    if (failed.length) alert(`読み込めなかったファイル:\n${failed.join('\n')}`);
+  });
+
+  // 本棚: 戻る・編集・フォルダ操作
+  $('lib-back').addEventListener('click', () => {
+    state.libFolder = null;
+    renderLibrary();
+  });
+  $('lib-edit').addEventListener('click', () => {
+    state.libEdit = !state.libEdit;
+    renderLibrary();
+  });
+  $('folder-add').addEventListener('click', async () => {
+    const name = prompt('フォルダ名')?.trim();
+    if (!name) return;
+    const folders = await store.listFolders();
+    if (folders.some((f) => f.name === name)) {
+      alert('同じ名前のフォルダがあります。');
+      return;
+    }
+    await store.putFolders([{ id: newId(), name, order: await nextOrder(null), addedAt: Date.now() }]);
+    await renderLibrary();
+  });
+  $('folder-rename').addEventListener('click', async () => {
+    const folders = await store.listFolders();
+    const folder = folders.find((f) => f.id === state.libFolder);
+    if (!folder) return;
+    const name = prompt('新しいフォルダ名', folder.name)?.trim();
+    if (!name || name === folder.name) return;
+    if (folders.some((f) => f.name === name)) {
+      alert('同じ名前のフォルダがあります。');
+      return;
+    }
+    folder.name = name;
+    await store.putFolders([folder]);
+    await renderLibrary();
+  });
+  $('folder-delete').addEventListener('click', async () => {
+    const folders = await store.listFolders();
+    const folder = folders.find((f) => f.id === state.libFolder);
+    if (!folder) return;
+    if (!confirm(`フォルダ「${folder.name}」を削除しますか？\n中の本は消さずに、本棚（フォルダの外）へ戻します。`)) return;
+    const books = (await store.listBooks()).filter((b) => b.folderId === folder.id).sort((a, b) => a.order - b.order);
+    let order = await nextOrder(null);
+    for (const b of books) {
+      b.folderId = null;
+      b.order = order;
+      order += 10;
+    }
+    await store.updateBooks(books);
+    await store.deleteFolder(folder.id);
+    state.libFolder = null;
+    await renderLibrary();
   });
 
   $('paste-btn').addEventListener('click', () => {
@@ -900,6 +1193,7 @@ async function init() {
   bindSettings();
   bindUi();
   bindStageGestures();
+  bindLibraryDrag();
   bindKeys();
   applyDisplaySettings();
 

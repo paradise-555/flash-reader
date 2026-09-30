@@ -160,7 +160,49 @@ button { touch-action: manipulation; }
 .book-open .m { display: block; color: var(--muted); font-size: 12px; margin-top: 6px; }
 .book-open .p { display: block; height: 3px; margin-top: 8px; background: var(--line); border-radius: 2px; overflow: hidden; }
 .book-open .p i { display: block; height: 100%; background: var(--accent); }
-.book-del { color: var(--muted); margin-right: 4px; }
+.book-del { color: var(--muted); }
+.lib-edit { margin-left: auto; font-size: 15px; }
+#library .app-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.edit-hint { font-size: 11px; color: var(--muted); margin-left: auto; }
+/* 項目の右側の操作（移動・削除・≡）は編集モードのときだけ出す */
+.item-tools { display: none; align-items: center; gap: 2px; padding-right: 4px; }
+#library.editing .item-tools { display: flex; }
+#library.editing .book-open { cursor: default; }
+.drag-handle {
+  width: 40px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  touch-action: none; /* ドラッグ中に画面がスクロールしないように */
+  cursor: grab;
+}
+.drag-handle svg, .folder-item .t svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.book-item.dragging {
+  position: relative;
+  z-index: 5;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  opacity: 0.95;
+}
+.folder-item { border-color: var(--accent); }
+.folder-item .t { display: flex; align-items: center; gap: 8px; font-family: var(--font-ui); }
+.folder-item .t svg { color: var(--accent); flex-shrink: 0; }
 .empty { text-align: center; color: var(--muted); margin-top: 30vh; line-height: 1.8; }
 .lib-actions {
   display: grid;

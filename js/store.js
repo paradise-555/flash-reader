@@ -1,8 +1,10 @@
 // IndexedDB による端末内保存
-// books: { id, title, totalChars, offset, addedAt, openedAt }  ※offset = 読んだ位置（字）
-// texts: { id, raw }  ※本文（一覧表示で読み込まないよう分けて保存）
+// books:   { id, title, totalChars, offset, addedAt, openedAt, folderId, order }
+//          ※offset = 読んだ位置（字）、folderId = 入っているフォルダ（null なら本棚直下）、order = 並び順
+// texts:   { id, raw }  ※本文（一覧表示で読み込まないよう分けて保存）
+// folders: { id, name, order, addedAt }  ※フォルダ（本棚直下に置く。入れ子はしない）
 const DB_NAME = 'flash-reader';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise = null;
 
@@ -11,9 +13,11 @@ function openDb() {
     dbPromise = new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, DB_VERSION);
       req.onupgradeneeded = () => {
+        // 既存のデータは残したまま、足りない保存場所だけ作る（v1 → v2 でフォルダを追加）
         const db = req.result;
-        db.createObjectStore('books', { keyPath: 'id' });
-        db.createObjectStore('texts', { keyPath: 'id' });
+        for (const name of ['books', 'texts', 'folders']) {
+          if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'id' });
+        }
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -61,6 +65,35 @@ export function addBook(meta, raw) {
 export function updateBook(meta) {
   return run('books', 'readwrite', (tx) => {
     tx.objectStore('books').put(meta);
+  });
+}
+
+// 複数の本のメタ情報をまとめて保存する（並べ替え・移動用）
+export function updateBooks(metas) {
+  return run('books', 'readwrite', (tx) => {
+    const st = tx.objectStore('books');
+    for (const m of metas) st.put(m);
+  });
+}
+
+export function listFolders() {
+  return run('folders', 'readonly', (tx, set) => {
+    const req = tx.objectStore('folders').getAll();
+    req.onsuccess = () => set(req.result);
+  });
+}
+
+export function putFolders(folders) {
+  return run('folders', 'readwrite', (tx) => {
+    const st = tx.objectStore('folders');
+    for (const f of folders) st.put(f);
+  });
+}
+
+// フォルダを消す。中の本は消さず、呼び出し側で本棚直下へ移してから呼ぶ
+export function deleteFolder(id) {
+  return run('folders', 'readwrite', (tx) => {
+    tx.objectStore('folders').delete(id);
   });
 }
 
