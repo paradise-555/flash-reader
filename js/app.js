@@ -1225,6 +1225,12 @@ async function init() {
       location.reload();
     });
     navigator.serviceWorker.register('sw.js').catch(console.error);
+    // iOS はアプリに戻っただけでは更新を確認しないので、表示されたときにも確認する
+    // （再生中は切り替え時の再読み込みを避けるため確認しない）
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden || state.playing) return;
+      navigator.serviceWorker.getRegistration().then((reg) => reg?.update()).catch(() => {});
+    });
   }
 
   // 初回だけ、一覧のいちばん古いサンプルを入れておく
