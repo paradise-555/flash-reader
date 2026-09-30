@@ -6,8 +6,10 @@ const parser = new Parser(model);
 
 // 重要語の記法: 【語】 または **語**
 const EMPH_RE = /【([^【】\n]+)】|\*\*([^*\n]+?)\*\*/g;
-// 見出し記法: "# " "## " "### "
-const HEADING_RE = /^(#{1,3})[ 　]+(.+)$/;
+// 見出し記法: "# " 〜 "###### "（# の数 = 階層。1行目の "# " は書名）
+const HEADING_RE = /^(#{1,6})[ 　]+(.+)$/;
+// 元の本のページ番号: "%p 9" の1行（画面には出さない）。以降の段落がそのページ
+const PAGE_RE = /^%p[ 　]*(\S+)$/;
 // 文末（ここを越えてまとめない）
 const HARD_END_RE = /[。．！？!?」』]$/;
 // 読点類（最小字数を満たしていればここで区切る）
@@ -21,10 +23,11 @@ const MAX_CHARS = 20;
 /**
  * 本文を段落単位に解析する。
  * - 1行目の "# タイトル" は書名として扱う
- * - "## 章" などは見出し段落
+ * - "## 章" などは見出し段落（level = # の数）
+ * - "%p 9" の行は元の本のページ番号（pages に記録し、本文には含めない）
  * - それ以外の空でない行は1行=1段落
  * - 青空文庫形式のルビ（｜ 《》）は除去する
- * @returns {{title: string, paras: Array, totalChars: number}}
+ * @returns {{title: string, paras: Array, pages: Array<{offset: number, label: string}>, totalChars: number}}
  */
 export function parseBook(raw) {
   const text = raw
@@ -34,19 +37,28 @@ export function parseBook(raw) {
     .replace(/《[^》\n]*》/g, '');
   let title = '';
   const paras = [];
+  const pages = [];
   let offset = 0;
   for (const rawLine of text.split('\n')) {
     const line = rawLine.trim();
     if (!line) continue;
+    const pg = line.match(PAGE_RE);
+    if (pg) {
+      // 同じ位置に続けて書かれた場合は後のものを採用する
+      if (pages.length && pages[pages.length - 1].offset === offset) pages.pop();
+      pages.push({ offset, label: pg[1] });
+      continue;
+    }
     const h = line.match(HEADING_RE);
     if (h) {
       const body = extractEmph(h[2]).plain.trim();
       if (!body) continue;
-      if (h[1].length === 1 && !title && paras.length === 0) {
+      const level = h[1].length;
+      if (level === 1 && !title && paras.length === 0) {
         title = body;
         continue;
       }
-      paras.push({ kind: 'heading', text: body, emph: [], start: offset });
+      paras.push({ kind: 'heading', level, text: body, emph: [], start: offset });
       offset += body.length;
       continue;
     }
@@ -55,7 +67,7 @@ export function parseBook(raw) {
     paras.push({ kind: 'text', text: plain, emph, start: offset });
     offset += plain.length;
   }
-  return { title, paras, totalChars: offset };
+  return { title, paras, pages, totalChars: offset };
 }
 
 // 重要語の記号を外し、段落内での位置 [開始, 終了) を記録する
@@ -82,7 +94,7 @@ export function buildUnits(book) {
   const units = [];
   book.paras.forEach((p, pi) => {
     if (p.kind === 'heading') {
-      units.push({ text: p.text, start: p.start, emph: [], kind: 'heading', para: pi });
+      units.push({ text: p.text, start: p.start, emph: [], kind: 'heading', level: p.level, para: pi });
       return;
     }
     const bounds = parser
@@ -243,9 +255,30 @@ function toChunk(g, next) {
     end: first.start + text.length,
     emph,
     kind: first.kind,
+    level: first.level ?? 0, // 見出しの階層（本文は 0）
     para: first.para,
     pause,
   };
+}
+
+/**
+ * 字位置 offset が元の本の何ページかを返す（ページ情報がなければ ''）。
+ * @param {Array<{offset: number, label: string}>} pages parseBook の pages（offset 昇順）
+ */
+export function pageAt(pages, offset) {
+  let lo = 0;
+  let hi = pages.length - 1;
+  let ans = '';
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (pages[mid].offset <= offset) {
+      ans = pages[mid].label;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return ans;
 }
 
 /**

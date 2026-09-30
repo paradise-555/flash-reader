@@ -1,4 +1,4 @@
-import { parseBook, buildUnits, buildChunks, chunkDuration } from './chunker.js';
+import { parseBook, buildUnits, buildChunks, chunkDuration, pageAt } from './chunker.js';
 import * as store from './store.js';
 
 const $ = (id) => document.getElementById(id);
@@ -236,7 +236,7 @@ function rebuildChunks(offset) {
   state.chunks = buildChunks(state.units, settings);
   state.chapters = [];
   state.chunks.forEach((c, i) => {
-    if (c.kind === 'heading') state.chapters.push({ title: c.text, idx: i });
+    if (c.kind === 'heading') state.chapters.push({ title: c.text, idx: i, level: c.level });
   });
   recomputeDurations();
   state.idx = indexForOffset(offset);
@@ -291,7 +291,9 @@ function render() {
   $('seek').value = state.idx;
   const atEnd = state.idx === state.chunks.length - 1;
   const pos = atEnd ? state.book.totalChars : c.start;
-  $('pos-text').textContent = `${fmtNum(pos)} / ${fmtNum(state.book.totalChars)}字`;
+  const page = pageAt(state.book.pages, c.start);
+  $('pos-text').textContent =
+    (page ? `p.${page} ・ ` : '') + `${fmtNum(pos)} / ${fmtNum(state.book.totalChars)}字`;
   $('remain-text').textContent = `残り 約${fmtTime(state.remain[state.idx])}`;
   $('chapter-title').textContent = currentChapter()?.title ?? '';
 }
@@ -524,13 +526,24 @@ function openChapters() {
   const list = $('chapter-list');
   list.replaceChildren();
   const cur = currentChapter();
-  const items = [{ title: '（最初から）', idx: 0 }, ...state.chapters];
-  for (const ch of items) {
+  // いちばん浅い見出しを字下げ 0 にする
+  const minLevel = Math.min(...state.chapters.map((ch) => ch.level), 99);
+  const top = { title: '（最初から）', idx: 0, level: minLevel };
+  for (const ch of [top, ...state.chapters]) {
     const li = document.createElement('li');
     const b = document.createElement('button');
     b.type = 'button';
     b.textContent = ch.title;
-    if (cur ? ch === cur : ch.idx === 0 && ch.title === '（最初から）') b.classList.add('current');
+    b.style.paddingLeft = `${4 + Math.max(0, ch.level - minLevel) * 16}px`;
+    b.classList.toggle('sub', ch.level > minLevel);
+    const page = pageAt(state.book.pages, state.chunks[ch.idx]?.start ?? 0);
+    if (page && ch !== top) {
+      const pg = document.createElement('span');
+      pg.className = 'toc-page';
+      pg.textContent = `p.${page}`;
+      b.append(pg);
+    }
+    if (cur ? ch === cur : ch === top) b.classList.add('current');
     b.addEventListener('click', () => {
       closeSheets();
       goTo(ch.idx);
@@ -552,11 +565,20 @@ function openContext() {
   let lastPara = -1;
   let pEl = null;
   let curEl = null;
+  // ページの始まり（字位置 → ページ番号）。段落の先頭で一致したら番号を出す
+  const pageStarts = new Map(state.book.pages.map((p) => [p.offset, p.label]));
   let i = state.idx;
   while (i > 0 && cs[i - 1].para >= c.para - 1) i--;
   for (; i < cs.length && cs[i].para <= c.para + 1; i++) {
     const k = cs[i];
     if (k.para !== lastPara) {
+      const label = pageStarts.get(state.book.paras[k.para].start);
+      if (label) {
+        const pg = document.createElement('div');
+        pg.className = 'ctx-page';
+        pg.textContent = `p.${label}`;
+        body.append(pg);
+      }
       pEl = document.createElement(k.kind === 'heading' ? 'h3' : 'p');
       body.append(pEl);
       lastPara = k.para;
