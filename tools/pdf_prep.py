@@ -1,6 +1,9 @@
 """参考書 PDF を文字起こし用に下ごしらえする。
 
-  python tools/pdf_prep.py <作業名> <スキャンPDF> [OCR済みPDF] [--dpi 200]
+  python tools/pdf_prep.py <作業名> <PDF> [OCR済みPDF] [--dpi 200]
+
+  OCR 済み PDF（画像＋文字データ）が1つあればそれだけ渡せばよい（文字データを自動で取り出す）。
+  画像だけのスキャン PDF と OCR 済み PDF が別々にある場合は両方渡す。
 
 出力先: ocr_work/<作業名>/ （.gitignore 済み。GitHub には上がらない）
   page_001.png …  各ページの画像（Claude が読み取る）
@@ -36,6 +39,11 @@ def main() -> int:
     for i in range(n):
         img = scan[i].render(scale=scale).to_pil()
         img.save(out / f"page_{i + 1:03d}.png")
+
+    # OCR 済み PDF が別に無ければ、スキャン PDF 自体に文字データがあるか調べて使う
+    # （OCR 済み PDF は元の画像をそのまま含むので、それ1つを渡すだけでよい）
+    if not args.ocr and any(scan[i].get_textpage().count_chars() for i in range(min(n, 5))):
+        args.ocr = args.scan
 
     ocr_n = 0
     if args.ocr:
