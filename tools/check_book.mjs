@@ -29,11 +29,12 @@ if (flag === '--fix') {
   raw = raw
     .replace(/\r\n?/g, '\n')
     .replace(/，/g, '、')
+    .replace(/^・(\d+)[．.。](?!\d)\s*/gm, '・$1 ') // 番号付き箇条書き「・1．」→「・1 」（句点にしない）
     .replace(/．/g, '。')
     .replace(/[ 　]+$/gm, ''); // 行末の空白
   if (raw !== before) {
     writeFileSync(path, raw, 'utf8');
-    console.log('FIX: 「，」→「、」「．」→「。」、行末の空白を整形しました');
+    console.log('FIX: 「，」→「、」「．」→「。」、「・1．」→「・1 」、行末の空白を整形しました');
   }
 }
 
